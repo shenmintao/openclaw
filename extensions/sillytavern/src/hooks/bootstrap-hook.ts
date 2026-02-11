@@ -1,14 +1,26 @@
 /**
  * Bootstrap Hook for SillyTavern
- * Injects character card and world info content into the system prompt
+ * Injects character card, world info, and preset content into the system prompt
  */
 
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import type { CharacterConfig, WorldInfoConfig, SillyTavernPluginConfig } from "../types.js";
+import type {
+  CharacterConfig,
+  WorldInfoConfig,
+  PresetConfig,
+  SillyTavernPluginConfig,
+} from "../types.js";
 import { buildCharacterPrompt } from "../parsers/character-card.js";
 import { getActiveCharacterCard } from "../storage/character-store.js";
 import { getEnabledWorldInfoBooks } from "../storage/world-info-store.js";
 import { getActivatedEntries, buildWorldInfoPrompt } from "../parsers/world-info.js";
+import { getActivePreset } from "../storage/preset-store.js";
+import {
+  getEnabledPrompts,
+  buildPresetSystemPrompt,
+  applyMacros,
+  getDefaultMacros,
+} from "../parsers/preset.js";
 
 /**
  * Get plugin config from OpenClaw config
@@ -46,8 +58,20 @@ function getWorldInfoConfig(pluginConfig?: SillyTavernPluginConfig): WorldInfoCo
 }
 
 /**
+ * Get preset config with defaults
+ */
+function getPresetConfig(pluginConfig?: SillyTavernPluginConfig): PresetConfig {
+  return {
+    applySystemPrompt: true,
+    applyMacros: true,
+    applySamplingParams: false,
+    ...pluginConfig?.preset,
+  };
+}
+
+/**
  * Register the bootstrap hook using before_agent_start
- * This hook injects character card and world info content as prependContext
+ * This hook injects character card, world info, and preset content as prependContext
  */
 export function registerBootstrapHook(api: OpenClawPluginApi): void {
   // Use before_agent_start hook to inject content
@@ -55,14 +79,62 @@ export function registerBootstrapHook(api: OpenClawPluginApi): void {
     const pluginConfig = getPluginConfig(api.config as unknown as Record<string, unknown>);
     const characterConfig = getCharacterConfig(pluginConfig);
     const worldInfoConfig = getWorldInfoConfig(pluginConfig);
+    const presetConfig = getPresetConfig(pluginConfig);
 
     const contextParts: string[] = [];
+
+    // Get active character card for macro substitution
+    const activeCard = await getActiveCharacterCard();
+
+    // ========================================================================
+    // Preset Injection (System Prompts)
+    // ========================================================================
+
+    if (presetConfig.applySystemPrompt !== false) {
+      const activePreset = await getActivePreset();
+
+      if (activePreset) {
+        api.logger.debug?.(`[sillytavern] Injecting preset: ${activePreset.name}`);
+
+        // Get enabled prompts with any overrides
+        const enabledPrompts = getEnabledPrompts(activePreset.data, activePreset.entryOverrides);
+
+        if (enabledPrompts.length > 0) {
+          // Build the system prompt from enabled prompts
+          let presetPrompt = buildPresetSystemPrompt(enabledPrompts, {
+            separator: "\n\n",
+            includeMarkers: false,
+          });
+
+          // Apply macros if enabled
+          if (presetConfig.applyMacros !== false && presetPrompt) {
+            const macros = getDefaultMacros({
+              user: pluginConfig?.macros?.user,
+              char: activeCard?.name,
+            });
+
+            // Add custom variables if defined
+            if (pluginConfig?.macros?.customVariables) {
+              Object.assign(macros, pluginConfig.macros.customVariables);
+            }
+
+            presetPrompt = applyMacros(presetPrompt, macros);
+          }
+
+          if (presetPrompt) {
+            contextParts.push(presetPrompt);
+            api.logger.debug?.(
+              `[sillytavern] Preset prompt built (${enabledPrompts.length} prompts, ${presetPrompt.length} chars)`,
+            );
+          }
+        }
+      }
+    }
 
     // ========================================================================
     // Character Card Injection
     // ========================================================================
 
-    const activeCard = await getActiveCharacterCard();
     if (activeCard) {
       api.logger.debug?.(`[sillytavern] Injecting character card: ${activeCard.name}`);
 

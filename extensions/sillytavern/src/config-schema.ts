@@ -121,6 +121,34 @@ export function sillyTavernConfigSchema(): PluginConfigSchema {
         }
       }
 
+      // Parse preset config
+      if (value.preset !== undefined) {
+        if (!isRecord(value.preset)) {
+          return error(["preset"], "expected object");
+        }
+        config.preset = {};
+        const preset = value.preset;
+
+        if (preset.applySystemPrompt !== undefined) {
+          if (!isBoolean(preset.applySystemPrompt)) {
+            return error(["preset", "applySystemPrompt"], "expected boolean");
+          }
+          config.preset.applySystemPrompt = preset.applySystemPrompt;
+        }
+        if (preset.applyMacros !== undefined) {
+          if (!isBoolean(preset.applyMacros)) {
+            return error(["preset", "applyMacros"], "expected boolean");
+          }
+          config.preset.applyMacros = preset.applyMacros;
+        }
+        if (preset.applySamplingParams !== undefined) {
+          if (!isBoolean(preset.applySamplingParams)) {
+            return error(["preset", "applySamplingParams"], "expected boolean");
+          }
+          config.preset.applySamplingParams = preset.applySamplingParams;
+        }
+      }
+
       return { success: true, data: config };
     },
     jsonSchema: {
@@ -172,6 +200,24 @@ export function sillyTavernConfigSchema(): PluginConfigSchema {
             recursiveScan: {
               type: "boolean",
               description: "Enable recursive keyword scanning (default: false)",
+            },
+          },
+        },
+        preset: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            applySystemPrompt: {
+              type: "boolean",
+              description: "Apply preset system prompts (default: true)",
+            },
+            applyMacros: {
+              type: "boolean",
+              description: "Apply macro substitution to prompts (default: true)",
+            },
+            applySamplingParams: {
+              type: "boolean",
+              description: "Apply preset sampling parameters (default: false)",
             },
           },
         },
