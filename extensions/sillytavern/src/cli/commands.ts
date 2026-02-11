@@ -1,6 +1,6 @@
 /**
  * SillyTavern CLI Commands
- * Provides commands for managing character cards, world info, and presets
+ * Provides commands for managing character cards, world info, presets, and memories
  */
 
 import type { Command } from "commander";
@@ -38,6 +38,25 @@ import {
   getStorageStats as getPresetStorageStats,
 } from "../storage/preset-store.js";
 import { getPresetSummary } from "../parsers/preset.js";
+import {
+  loadAllMemoryBooks,
+  loadMemoryBook,
+  createMemoryBook,
+  deleteMemoryBook,
+  addMemory,
+  updateMemory,
+  deleteMemory,
+} from "../memory/store.js";
+import {
+  importSkill,
+  loadSkillsIndex,
+  loadStoredSkill,
+  setSkillEnabled,
+  removeSkill,
+  getAllSkills,
+  loadEnabledSkills,
+  syncSkillsFromWorkspace,
+} from "../skills/store.js";
 
 /**
  * Register SillyTavern CLI commands
@@ -561,6 +580,434 @@ export function registerSillyTavernCli(program: Command): void {
     });
 
   // ============================================================================
+  // Memory Commands
+  // ============================================================================
+
+  const memory = sillytavern
+    .command("memory")
+    .alias("mem")
+    .description("Manage long-term memories");
+
+  // List memory books
+  memory
+    .command("list")
+    .alias("ls")
+    .description("List all memory books")
+    .option("--json", "Output as JSON")
+    .action((options: { json?: boolean }) => {
+      const books = loadAllMemoryBooks();
+
+      if (options.json) {
+        console.log(JSON.stringify(books, null, 2));
+        return;
+      }
+
+      if (books.length === 0) {
+        console.log("No memory books found.");
+        console.log("Memory books are created automatically when using characters.");
+        return;
+      }
+
+      console.log(`Memory Books (${books.length}):\n`);
+      for (const book of books) {
+        const charInfo = book.characterId ? ` [char: ${book.characterId.slice(0, 8)}...]` : "";
+        const sessionInfo = book.sessionKey ? ` [session: ${book.sessionKey}]` : "";
+        console.log(`  📚 ${book.name}${charInfo}${sessionInfo}`);
+        console.log(`     ID: ${book.id}`);
+        console.log(`     Entries: ${book.entries.length}`);
+        console.log(`     Created: ${book.createdAt}`);
+        console.log(`     Updated: ${book.updatedAt}`);
+        console.log();
+      }
+    });
+
+  // Show memory book details
+  memory
+    .command("show <bookId>")
+    .description("Show details of a memory book")
+    .option("--json", "Output as JSON")
+    .action((bookId: string, options: { json?: boolean }) => {
+      const book = loadMemoryBook(bookId);
+
+      if (!book) {
+        console.error(`❌ Memory book not found: ${bookId}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (options.json) {
+        console.log(JSON.stringify(book, null, 2));
+        return;
+      }
+
+      console.log(`Memory Book: ${book.name}\n`);
+      console.log(`ID: ${book.id}`);
+      if (book.characterId) console.log(`Character ID: ${book.characterId}`);
+      if (book.sessionKey) console.log(`Session Key: ${book.sessionKey}`);
+      console.log(`Created: ${book.createdAt}`);
+      console.log(`Updated: ${book.updatedAt}`);
+      console.log(`\nSettings:`);
+      console.log(`  Max Memories Per Request: ${book.settings.maxMemoriesPerRequest}`);
+      console.log(`  Max Memory Tokens: ${book.settings.maxMemoryTokens}`);
+      console.log(`  Use Keyword Retrieval: ${book.settings.useKeywordRetrieval}`);
+      console.log(`  Auto Extract: ${book.settings.autoExtract}`);
+      console.log(`  Min Importance: ${book.settings.minImportanceForInjection}`);
+      console.log(`  Sort By: ${book.settings.sortBy}`);
+
+      console.log(`\nMemories (${book.entries.length}):`);
+      if (book.entries.length === 0) {
+        console.log("  (no memories)");
+      } else {
+        for (const entry of book.entries) {
+          const status = entry.enabled ? "✅" : "❌";
+          const importance = entry.importance ?? 50;
+          const category = entry.category ? `[${entry.category}] ` : "";
+          console.log(`\n  ${status} ${category}${entry.content.slice(0, 80)}${entry.content.length > 80 ? "..." : ""}`);
+          console.log(`     ID: ${entry.id}`);
+          console.log(`     Type: ${entry.type} | Importance: ${importance} | Access Count: ${entry.accessCount}`);
+          if (entry.keywords && entry.keywords.length > 0) {
+            console.log(`     Keywords: ${entry.keywords.join(", ")}`);
+          }
+        }
+      }
+    });
+
+  // Create memory book
+  memory
+    .command("create <name>")
+    .description("Create a new memory book")
+    .option("--character <id>", "Associate with character ID")
+    .option("--session <key>", "Associate with session key")
+    .action((name: string, options: { character?: string; session?: string }) => {
+      const book = createMemoryBook({
+        name,
+        characterId: options.character,
+        sessionKey: options.session,
+      });
+
+      console.log(`✅ Created memory book: ${book.name}`);
+      console.log(`   ID: ${book.id}`);
+    });
+
+  // Add memory
+  memory
+    .command("add <bookId> <content>")
+    .description("Add a memory to a book")
+    .option("-k, --keywords <keywords>", "Comma-separated keywords")
+    .option("-i, --importance <number>", "Importance score (0-100)", "50")
+    .option("-c, --category <category>", "Memory category")
+    .action((bookId: string, content: string, options: { keywords?: string; importance?: string; category?: string }) => {
+      const keywords = options.keywords?.split(",").map((k) => k.trim());
+      const importance = parseInt(options.importance ?? "50", 10);
+
+      const entry = addMemory(bookId, {
+        content,
+        keywords,
+        importance,
+        category: options.category,
+        type: "manual",
+      });
+
+      if (!entry) {
+        console.error(`❌ Failed to add memory. Book not found: ${bookId}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(`✅ Added memory: ${entry.id}`);
+      console.log(`   Content: ${content.slice(0, 50)}${content.length > 50 ? "..." : ""}`);
+      console.log(`   Importance: ${importance}`);
+      if (keywords) console.log(`   Keywords: ${keywords.join(", ")}`);
+    });
+
+  // Update memory
+  memory
+    .command("update <bookId> <memoryId>")
+    .description("Update a memory entry")
+    .option("-c, --content <content>", "New content")
+    .option("-k, --keywords <keywords>", "New comma-separated keywords")
+    .option("-i, --importance <number>", "New importance score (0-100)")
+    .option("--category <category>", "New category")
+    .option("--enable", "Enable the memory")
+    .option("--disable", "Disable the memory")
+    .action((bookId: string, memoryId: string, options: {
+      content?: string;
+      keywords?: string;
+      importance?: string;
+      category?: string;
+      enable?: boolean;
+      disable?: boolean;
+    }) => {
+      const updates: Record<string, unknown> = {};
+
+      if (options.content) updates.content = options.content;
+      if (options.keywords) updates.keywords = options.keywords.split(",").map((k) => k.trim());
+      if (options.importance) updates.importance = parseInt(options.importance, 10);
+      if (options.category) updates.category = options.category;
+      if (options.enable) updates.enabled = true;
+      if (options.disable) updates.enabled = false;
+
+      if (Object.keys(updates).length === 0) {
+        console.error("❌ No updates specified. Use --content, --keywords, --importance, --category, --enable, or --disable.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const entry = updateMemory(bookId, memoryId, updates);
+
+      if (!entry) {
+        console.error(`❌ Failed to update memory. Book or memory not found.`);
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(`✅ Updated memory: ${memoryId}`);
+    });
+
+  // Delete memory
+  memory
+    .command("remove <bookId> <memoryId>")
+    .alias("rm")
+    .description("Remove a memory from a book")
+    .action((bookId: string, memoryId: string) => {
+      const success = deleteMemory(bookId, memoryId);
+
+      if (!success) {
+        console.error(`❌ Failed to remove memory. Book or memory not found.`);
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(`✅ Removed memory: ${memoryId}`);
+    });
+
+  // Delete memory book
+  memory
+    .command("delete <bookId>")
+    .description("Delete a memory book")
+    .option("-f, --force", "Skip confirmation")
+    .action((bookId: string, options: { force?: boolean }) => {
+      const book = loadMemoryBook(bookId);
+
+      if (!book) {
+        console.error(`❌ Memory book not found: ${bookId}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (!options.force && book.entries.length > 0) {
+        console.log(`⚠️  Memory book "${book.name}" has ${book.entries.length} memories.`);
+        console.log("Use --force to delete anyway.");
+        return;
+      }
+
+      const success = deleteMemoryBook(bookId);
+
+      if (success) {
+        console.log(`✅ Deleted memory book: ${book.name}`);
+      } else {
+        console.error(`❌ Failed to delete memory book: ${bookId}`);
+        process.exitCode = 1;
+      }
+    });
+
+  // ============================================================================
+  // Skills Commands
+  // ============================================================================
+
+  const skills = sillytavern
+    .command("skills")
+    .alias("skill")
+    .description("Manage skills");
+
+  // Import skill
+  skills
+    .command("import <file>")
+    .description("Import a skill from a SKILL.md file")
+    .option("--disabled", "Import as disabled")
+    .action(async (file: string, options: { disabled?: boolean }) => {
+      const filePath = path.resolve(file);
+      console.log(`Importing skill from: ${filePath}`);
+
+      try {
+        const skill = await importSkill(filePath, { enabled: !options.disabled });
+        console.log(`✅ Imported skill: ${skill.name}`);
+        console.log(`   ID: ${skill.id}`);
+        console.log(`   Description: ${skill.description}`);
+        console.log(`   Enabled: ${skill.enabled}`);
+      } catch (error) {
+        console.error(`❌ Failed to import: ${error}`);
+        process.exitCode = 1;
+      }
+    });
+
+  // List skills
+  skills
+    .command("list")
+    .alias("ls")
+    .description("List all imported skills")
+    .option("--enabled", "Show only enabled skills")
+    .action(async (options: { enabled?: boolean }) => {
+      const allSkills = await getAllSkills();
+
+      if (allSkills.length === 0) {
+        console.log("No skills imported yet.");
+        console.log("Use `openclaw st skills import <file>` to import a skill.");
+        return;
+      }
+
+      const filtered = options.enabled
+        ? allSkills.filter((s) => s.enabled)
+        : allSkills;
+
+      console.log(`Skills (${filtered.length}/${allSkills.length}):\n`);
+
+      for (const skill of filtered) {
+        const status = skill.enabled ? "✓" : "○";
+        const emoji = skill.metadata?.emoji ?? "🧩";
+        console.log(`  ${status} ${emoji} ${skill.name}`);
+        if (skill.description) {
+          console.log(`      ${skill.description.slice(0, 60)}${skill.description.length > 60 ? "..." : ""}`);
+        }
+      }
+    });
+
+  // Show skill details
+  skills
+    .command("show <name>")
+    .description("Show details of a skill")
+    .action(async (name: string) => {
+      const allSkills = await getAllSkills();
+      const skill = allSkills.find(
+        (s) => s.name.toLowerCase() === name.toLowerCase() || s.id === name,
+      );
+
+      if (!skill) {
+        console.error(`❌ Skill not found: ${name}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      const emoji = skill.metadata?.emoji ?? "🧩";
+      console.log(`${emoji} ${skill.name}`);
+      console.log(`${"─".repeat(40)}`);
+      console.log(`ID: ${skill.id}`);
+      console.log(`Description: ${skill.description}`);
+      console.log(`Source: ${skill.source}`);
+      console.log(`Enabled: ${skill.enabled}`);
+      console.log(`Imported: ${skill.importedAt}`);
+      console.log(`Path: ${skill.filePath}`);
+
+      if (skill.metadata?.homepage) {
+        console.log(`Homepage: ${skill.metadata.homepage}`);
+      }
+      if (skill.metadata?.primaryEnv) {
+        console.log(`Primary Env: ${skill.metadata.primaryEnv}`);
+      }
+      if (skill.metadata?.requires) {
+        const reqs = skill.metadata.requires;
+        if (reqs.bins?.length) {
+          console.log(`Required Bins: ${reqs.bins.join(", ")}`);
+        }
+        if (reqs.env?.length) {
+          console.log(`Required Env: ${reqs.env.join(", ")}`);
+        }
+      }
+
+      console.log(`\nContent Preview:`);
+      console.log(`${"─".repeat(40)}`);
+      console.log(skill.content.slice(0, 500) + (skill.content.length > 500 ? "..." : ""));
+    });
+
+  // Enable skill
+  skills
+    .command("enable <name>")
+    .description("Enable a skill")
+    .action(async (name: string) => {
+      const allSkills = await getAllSkills();
+      const skill = allSkills.find(
+        (s) => s.name.toLowerCase() === name.toLowerCase() || s.id === name,
+      );
+
+      if (!skill) {
+        console.error(`❌ Skill not found: ${name}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      await setSkillEnabled(skill.id, true);
+      console.log(`✅ Enabled skill: ${skill.name}`);
+    });
+
+  // Disable skill
+  skills
+    .command("disable <name>")
+    .description("Disable a skill")
+    .action(async (name: string) => {
+      const allSkills = await getAllSkills();
+      const skill = allSkills.find(
+        (s) => s.name.toLowerCase() === name.toLowerCase() || s.id === name,
+      );
+
+      if (!skill) {
+        console.error(`❌ Skill not found: ${name}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      await setSkillEnabled(skill.id, false);
+      console.log(`✅ Disabled skill: ${skill.name}`);
+    });
+
+  // Remove skill
+  skills
+    .command("remove <name>")
+    .alias("rm")
+    .description("Remove a skill")
+    .option("-f, --force", "Force removal without confirmation")
+    .action(async (name: string, options: { force?: boolean }) => {
+      const allSkills = await getAllSkills();
+      const skill = allSkills.find(
+        (s) => s.name.toLowerCase() === name.toLowerCase() || s.id === name,
+      );
+
+      if (!skill) {
+        console.error(`❌ Skill not found: ${name}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (!options.force) {
+        console.log(`⚠️  This will remove skill "${skill.name}".`);
+        console.log("Use --force to confirm removal.");
+        return;
+      }
+
+      await removeSkill(skill.id);
+      console.log(`✅ Removed skill: ${skill.name}`);
+    });
+
+  // Sync skills from workspace
+  skills
+    .command("sync [workspace]")
+    .description("Sync skills from workspace directory")
+    .action(async (workspace?: string) => {
+      const workspaceDir = workspace ? path.resolve(workspace) : process.cwd();
+      console.log(`Syncing skills from: ${workspaceDir}`);
+
+      try {
+        const result = await syncSkillsFromWorkspace(workspaceDir);
+        console.log(`✅ Sync complete:`);
+        console.log(`   Added: ${result.added}`);
+        console.log(`   Updated: ${result.updated}`);
+        console.log(`   Removed: ${result.removed}`);
+      } catch (error) {
+        console.error(`❌ Failed to sync: ${error}`);
+        process.exitCode = 1;
+      }
+    });
+
+  // ============================================================================
   // Status Command
   // ============================================================================
 
@@ -571,6 +1018,10 @@ export function registerSillyTavernCli(program: Command): void {
       const charStats = await getCharacterStorageStats();
       const wiStats = await getWorldInfoStorageStats();
       const presetStats = await getPresetStorageStats();
+      const memoryBooks = loadAllMemoryBooks();
+      const totalMemories = memoryBooks.reduce((sum, book) => sum + book.entries.length, 0);
+      const skillsIndex = await loadSkillsIndex();
+      const enabledSkills = skillsIndex.entries.filter((s) => s.enabled).length;
 
       console.log("SillyTavern Plugin Status\n");
 
@@ -587,6 +1038,14 @@ export function registerSillyTavernCli(program: Command): void {
       console.log(`  Total: ${presetStats.presetCount}`);
       console.log(`  Active: ${presetStats.activePreset ?? "(none)"}`);
       console.log(`  Total Prompts: ${presetStats.totalPrompts}`);
+
+      console.log("\nMemories:");
+      console.log(`  Total Books: ${memoryBooks.length}`);
+      console.log(`  Total Memories: ${totalMemories}`);
+
+      console.log("\nSkills:");
+      console.log(`  Total: ${skillsIndex.entries.length}`);
+      console.log(`  Enabled: ${enabledSkills}`);
 
       console.log(`\nStorage: ${charStats.storageDir}`);
     });
