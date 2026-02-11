@@ -13,15 +13,15 @@
  */
 
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { registerBootstrapHook } from "./src/hooks/bootstrap-hook.js";
 import { registerSillyTavernCli } from "./src/cli/commands.js";
+import { sillyTavernConfigSchema } from "./src/config-schema.js";
 
 const plugin = {
   id: "sillytavern",
   name: "SillyTavern",
   description: "SillyTavern character cards, world info, and presets support",
-  configSchema: emptyPluginConfigSchema(),
+  configSchema: sillyTavernConfigSchema(),
 
   register(api: OpenClawPluginApi) {
     api.logger.debug?.("[sillytavern] Registering SillyTavern plugin");
