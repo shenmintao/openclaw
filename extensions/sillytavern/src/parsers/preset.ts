@@ -239,37 +239,101 @@ export function getPresetSummary(stored: StoredPreset): {
 
 /**
  * Apply macros to a prompt content
+ * Supports both standard {{macro}} and custom {{custom::key}} syntax
  */
 export function applyMacros(
   content: string,
   macros: Record<string, string>,
+  customVariables?: Record<string, string>,
 ): string {
   let result = content;
+
+  // Apply standard macros
   for (const [key, value] of Object.entries(macros)) {
     const pattern = new RegExp(`\\{\\{${key}\\}\\}`, "gi");
     result = result.replace(pattern, value);
   }
+
+  // Apply custom variables with {{custom::key}} syntax
+  if (customVariables) {
+    for (const [key, value] of Object.entries(customVariables)) {
+      const pattern = new RegExp(`\\{\\{custom::${key}\\}\\}`, "gi");
+      result = result.replace(pattern, value);
+    }
+  }
+
   return result;
 }
 
 /**
- * Get default macros
+ * Format date according to format string
+ * Supports: YYYY, MM, DD, HH, mm, ss
  */
-export function getDefaultMacros(options?: {
+function formatDate(date: Date, format: string): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return format
+    .replace(/YYYY/g, date.getFullYear().toString())
+    .replace(/MM/g, pad(date.getMonth() + 1))
+    .replace(/DD/g, pad(date.getDate()))
+    .replace(/HH/g, pad(date.getHours()))
+    .replace(/mm/g, pad(date.getMinutes()))
+    .replace(/ss/g, pad(date.getSeconds()));
+}
+
+/**
+ * Macro options interface
+ */
+export interface MacroOptions {
+  /** User's display name */
   user?: string;
+  /** Character's display name */
   char?: string;
+  /** User persona description */
   persona?: string;
-}): Record<string, string> {
+  /** Date format string (default: YYYY-MM-DD) */
+  dateFormat?: string;
+  /** Time format string (default: HH:mm) */
+  timeFormat?: string;
+  /** Idle duration in minutes */
+  idleDuration?: number;
+  /** Random seed for reproducible random values */
+  randomSeed?: number;
+}
+
+/**
+ * Get default macros with configurable options
+ */
+export function getDefaultMacros(options?: MacroOptions): Record<string, string> {
+  const now = new Date();
+  const dateFormat = options?.dateFormat ?? "YYYY-MM-DD";
+  const timeFormat = options?.timeFormat ?? "HH:mm";
+
+  // Generate random value (optionally seeded)
+  let randomValue: number;
+  if (options?.randomSeed !== undefined) {
+    // Simple seeded random using the seed
+    const seed = options.randomSeed;
+    randomValue = Math.abs((seed * 9301 + 49297) % 233280) % 100;
+  } else {
+    randomValue = Math.floor(Math.random() * 100);
+  }
+
   return {
+    // Identity macros
     user: options?.user ?? "User",
     char: options?.char ?? "Assistant",
     persona: options?.persona ?? "",
-    // Time macros
-    time: new Date().toLocaleTimeString(),
-    date: new Date().toLocaleDateString(),
-    weekday: new Date().toLocaleDateString("en-US", { weekday: "long" }),
+    // Time macros with configurable formats
+    time: formatDate(now, timeFormat),
+    date: formatDate(now, dateFormat),
+    weekday: now.toLocaleDateString("en-US", { weekday: "long" }),
+    month: now.toLocaleDateString("en-US", { month: "long" }),
+    year: now.getFullYear().toString(),
     // Other common macros
-    idle_duration: "0",
-    random: String(Math.floor(Math.random() * 100)),
+    idle_duration: String(options?.idleDuration ?? 0),
+    random: String(randomValue),
+    // Additional useful macros
+    newline: "\n",
+    tab: "\t",
   };
 }

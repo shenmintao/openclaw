@@ -31,6 +31,14 @@ function isNumber(value: unknown): value is number {
   return typeof value === "number";
 }
 
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "string");
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -149,6 +157,122 @@ export function sillyTavernConfigSchema(): PluginConfigSchema {
         }
       }
 
+      // Parse macros config
+      if (value.macros !== undefined) {
+        if (!isRecord(value.macros)) {
+          return error(["macros"], "expected object");
+        }
+        config.macros = {};
+        const macros = value.macros;
+
+        if (macros.user !== undefined) {
+          if (!isString(macros.user)) {
+            return error(["macros", "user"], "expected string");
+          }
+          config.macros.user = macros.user;
+        }
+        if (macros.char !== undefined) {
+          if (!isString(macros.char)) {
+            return error(["macros", "char"], "expected string");
+          }
+          config.macros.char = macros.char;
+        }
+        if (macros.dateFormat !== undefined) {
+          if (!isString(macros.dateFormat)) {
+            return error(["macros", "dateFormat"], "expected string");
+          }
+          config.macros.dateFormat = macros.dateFormat;
+        }
+        if (macros.timeFormat !== undefined) {
+          if (!isString(macros.timeFormat)) {
+            return error(["macros", "timeFormat"], "expected string");
+          }
+          config.macros.timeFormat = macros.timeFormat;
+        }
+        if (macros.idleDuration !== undefined) {
+          if (!isNumber(macros.idleDuration)) {
+            return error(["macros", "idleDuration"], "expected number");
+          }
+          config.macros.idleDuration = macros.idleDuration;
+        }
+        if (macros.randomSeed !== undefined) {
+          if (!isNumber(macros.randomSeed)) {
+            return error(["macros", "randomSeed"], "expected number");
+          }
+          config.macros.randomSeed = macros.randomSeed;
+        }
+        if (macros.customVariables !== undefined) {
+          if (!isRecord(macros.customVariables)) {
+            return error(["macros", "customVariables"], "expected object");
+          }
+          // Validate all values are strings
+          for (const [key, val] of Object.entries(macros.customVariables)) {
+            if (!isString(val)) {
+              return error(["macros", "customVariables", key], "expected string value");
+            }
+          }
+          config.macros.customVariables = macros.customVariables as Record<string, string>;
+        }
+      }
+
+      // Parse skills config
+      if (value.skills !== undefined) {
+        if (!isRecord(value.skills)) {
+          return error(["skills"], "expected object");
+        }
+        config.skills = {};
+        const skills = value.skills;
+
+        if (skills.enabled !== undefined) {
+          if (!isBoolean(skills.enabled)) {
+            return error(["skills", "enabled"], "expected boolean");
+          }
+          config.skills.enabled = skills.enabled;
+        }
+        if (skills.maxSkills !== undefined) {
+          if (!isNumber(skills.maxSkills)) {
+            return error(["skills", "maxSkills"], "expected number");
+          }
+          config.skills.maxSkills = skills.maxSkills;
+        }
+        if (skills.maxTokens !== undefined) {
+          if (!isNumber(skills.maxTokens)) {
+            return error(["skills", "maxTokens"], "expected number");
+          }
+          config.skills.maxTokens = skills.maxTokens;
+        }
+        if (skills.filter !== undefined) {
+          if (!isStringArray(skills.filter)) {
+            return error(["skills", "filter"], "expected string array");
+          }
+          config.skills.filter = skills.filter;
+        }
+        if (skills.always !== undefined) {
+          if (!isStringArray(skills.always)) {
+            return error(["skills", "always"], "expected string array");
+          }
+          config.skills.always = skills.always;
+        }
+        if (skills.exclude !== undefined) {
+          if (!isStringArray(skills.exclude)) {
+            return error(["skills", "exclude"], "expected string array");
+          }
+          config.skills.exclude = skills.exclude;
+        }
+        if (skills.watch !== undefined) {
+          if (!isBoolean(skills.watch)) {
+            return error(["skills", "watch"], "expected boolean");
+          }
+          config.skills.watch = skills.watch;
+        }
+        if (skills.extraDirs !== undefined) {
+          if (!isStringArray(skills.extraDirs)) {
+            return error(["skills", "extraDirs"], "expected string array");
+          }
+          config.skills.extraDirs = skills.extraDirs;
+        }
+      }
+
       return { success: true, data: config };
     },
     jsonSchema: {
@@ -218,6 +342,124 @@ export function sillyTavernConfigSchema(): PluginConfigSchema {
             applySamplingParams: {
               type: "boolean",
               description: "Apply preset sampling parameters (default: false)",
+            },
+          },
+        },
+        macros: {
+          type: "object",
+          additionalProperties: false,
+          description: "Macro variables for template substitution (e.g., {{user}}, {{char}})",
+          properties: {
+            user: {
+              type: "string",
+              description: "User's display name (replaces {{user}})",
+            },
+            char: {
+              type: "string",
+              description: "Character's display name override (replaces {{char}}, defaults to character card name)",
+            },
+            dateFormat: {
+              type: "string",
+              description: "Date format string for {{date}} macro (default: YYYY-MM-DD)",
+            },
+            timeFormat: {
+              type: "string",
+              description: "Time format string for {{time}} macro (default: HH:mm)",
+            },
+            idleDuration: {
+              type: "number",
+              description: "Idle duration in minutes before triggering idle prompts",
+            },
+            randomSeed: {
+              type: "number",
+              description: "Random number seed for {{random}} macro",
+            },
+            customVariables: {
+              type: "object",
+              additionalProperties: { type: "string" },
+              description: "Custom variables that can be used with {{custom::key}} syntax",
+            },
+          },
+        },
+        memory: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            enabled: {
+              type: "boolean",
+              description: "Enable memory system (default: true)",
+            },
+            maxMemoriesPerRequest: {
+              type: "number",
+              description: "Maximum memories to inject per request (default: 10)",
+            },
+            maxMemoryTokens: {
+              type: "number",
+              description: "Maximum tokens for memory content (default: 1000)",
+            },
+            useKeywordRetrieval: {
+              type: "boolean",
+              description: "Use keyword-based memory retrieval (default: true)",
+            },
+            minImportance: {
+              type: "number",
+              description: "Minimum importance score for injection (0-100, default: 50)",
+            },
+            sortBy: {
+              type: "string",
+              enum: ["importance", "recency", "accessCount"],
+              description: "How to sort memories for injection (default: importance)",
+            },
+            autoExtract: {
+              type: "boolean",
+              description: "Auto-extract memories from conversations (default: false)",
+            },
+            extractionTriggers: {
+              type: "array",
+              items: { type: "string" },
+              description: "Keywords that trigger memory extraction",
+            },
+          },
+        },
+        skills: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            enabled: {
+              type: "boolean",
+              description: "Enable skills injection (default: true)",
+            },
+            maxSkills: {
+              type: "number",
+              description: "Maximum skills to include in prompt (default: 20)",
+            },
+            maxTokens: {
+              type: "number",
+              description: "Maximum tokens for skills content (default: 4096)",
+            },
+            filter: {
+              type: "array",
+              items: { type: "string" },
+              description: "Only include these skills (allowlist)",
+            },
+            always: {
+              type: "array",
+              items: { type: "string" },
+              description: "Skills to always include regardless of eligibility",
+            },
+            exclude: {
+              type: "array",
+              items: { type: "string" },
+              description: "Skills to exclude",
+            },
+            watch: {
+              type: "boolean",
+              description: "Watch skills directory for changes (default: false)",
+            },
+            extraDirs: {
+              type: "array",
+              items: { type: "string" },
+              description: "Extra directories to scan for skills",
             },
           },
         },

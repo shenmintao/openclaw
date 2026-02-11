@@ -319,10 +319,67 @@ export interface PresetConfig {
 
 /**
  * Macro variables configuration
+ * These variables can be used in presets and character cards with {{variable}} syntax
  */
 export interface MacrosConfig {
+  /** User's display name (replaces {{user}}) */
   user?: string;
+  /** Character's display name override (replaces {{char}}, defaults to character card name) */
+  char?: string;
+  /** Current date format (replaces {{date}}) */
+  dateFormat?: string;
+  /** Current time format (replaces {{time}}) */
+  timeFormat?: string;
+  /** Idle duration in minutes before triggering idle prompts */
+  idleDuration?: number;
+  /** Random number seed for {{random}} macro */
+  randomSeed?: number;
+  /** Custom variables that can be used with {{custom::key}} syntax */
   customVariables?: Record<string, string>;
+}
+
+/**
+ * Memory configuration for the plugin
+ */
+export interface MemoryConfig {
+  /** Whether memory system is enabled */
+  enabled?: boolean;
+  /** Maximum memories to inject per request */
+  maxMemoriesPerRequest?: number;
+  /** Maximum tokens for memory injection */
+  maxMemoryTokens?: number;
+  /** Whether to use keyword-based retrieval */
+  useKeywordRetrieval?: boolean;
+  /** Minimum importance score for injection (0-100) */
+  minImportance?: number;
+  /** How to sort memories: importance, recency, or accessCount */
+  sortBy?: "importance" | "recency" | "accessCount";
+  /** Whether to auto-extract memories from conversations */
+  autoExtract?: boolean;
+  /** Keywords that trigger memory extraction */
+  extractionTriggers?: string[];
+}
+
+/**
+ * Skills configuration for the plugin
+ */
+export interface SkillsConfig {
+  /** Whether skills system is enabled */
+  enabled?: boolean;
+  /** Maximum skills to include in prompt */
+  maxSkills?: number;
+  /** Maximum tokens for skills content */
+  maxTokens?: number;
+  /** Only include these skills (allowlist) */
+  filter?: string[];
+  /** Skills to always include regardless of eligibility */
+  always?: string[];
+  /** Skills to exclude */
+  exclude?: string[];
+  /** Watch skills directory for changes */
+  watch?: boolean;
+  /** Extra directories to scan for skills */
+  extraDirs?: string[];
 }
 
 /**
@@ -333,6 +390,8 @@ export interface SillyTavernPluginConfig {
   worldInfo?: WorldInfoConfig;
   preset?: PresetConfig;
   macros?: MacrosConfig;
+  memory?: MemoryConfig;
+  skills?: SkillsConfig;
 }
 
 // ============================================================================
