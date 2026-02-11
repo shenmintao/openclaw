@@ -1,0 +1,95 @@
+{
+  "id": "sillytavern",
+  "kind": "persona",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "character": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "string",
+            "description": "Currently active character card name"
+          },
+          "mergeWithSoul": {
+            "type": "boolean",
+            "default": true,
+            "description": "Merge character card with SOUL.md instead of replacing"
+          },
+          "includeExamples": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include dialogue examples in the prompt"
+          },
+          "includeScenario": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include scenario in the prompt"
+          },
+          "includeFirstMessage": {
+            "type": "boolean",
+            "default": false,
+            "description": "Include first message as greeting"
+          }
+        }
+      },
+      "worldInfo": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable world info/lorebook support"
+          },
+          "scanDepth": {
+            "type": "number",
+            "default": 5,
+            "description": "Number of recent messages to scan for keywords"
+          },
+          "maxEntries": {
+            "type": "number",
+            "default": 10,
+            "description": "Maximum number of entries to activate per turn"
+          },
+          "maxTokens": {
+            "type": "number",
+            "default": 2000,
+            "description": "Maximum tokens for world info content"
+          }
+        }
+      },
+      "preset": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "string",
+            "description": "Currently active preset name"
+          },
+          "applySystemPrompt": {
+            "type": "boolean",
+            "default": true,
+            "description": "Apply preset system prompts"
+          },
+          "applyMacros": {
+            "type": "boolean",
+            "default": true,
+            "description": "Expand macro variables like {{user}}, {{char}}"
+          }
+        }
+      },
+      "macros": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "type": "string",
+            "description": "Value for {{user}} macro"
+          }
+        },
+        "additionalProperties": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
