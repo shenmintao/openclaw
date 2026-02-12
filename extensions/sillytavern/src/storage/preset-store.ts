@@ -13,13 +13,14 @@ import {
   type ParseResult,
 } from "../parsers/preset.js";
 
-const STORAGE_DIR = ".openclaw/sillytavern";
+const STORAGE_DIR = ".openclaw/plugins/sillytavern";
 const PRESETS_DIR = "presets";
 const INDEX_FILE = "index.json";
 const INDEX_VERSION = 1;
 
 /**
  * Get the base storage directory
+ * Unified path: ~/.openclaw/plugins/sillytavern/
  */
 function getStorageDir(): string {
   return path.join(os.homedir(), STORAGE_DIR);

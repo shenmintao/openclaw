@@ -5,6 +5,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import type {
   SkillEntry,
   SkillsIndex,
@@ -16,21 +17,21 @@ import type {
   SkillEligibilityContext,
 } from "./types.js";
 import { parseSkillFile, buildSkillsPrompt } from "./parser.js";
+import { getBundledSkills, isBundledSkill } from "./bundled/index.js";
 
 const fsp = fs.promises;
 
-// Storage paths
-const SILLYTAVERN_DIR = ".sillytavern";
-const SKILLS_DIR = "skills";
+// Storage paths - unified under ~/.openclaw/plugins/sillytavern/
 const SKILLS_INDEX_FILE = "skills-index.json";
 const SKILLS_DATA_DIR = "skills-data";
 
 /**
  * Get the skills storage directory
+ * Unified path: ~/.openclaw/plugins/sillytavern/skills/
  */
 function getSkillsStorageDir(): string {
-  const homeDir = process.env.HOME || process.env.USERPROFILE || ".";
-  return path.join(homeDir, SILLYTAVERN_DIR, SKILLS_DIR);
+  const homeDir = os.homedir();
+  return path.join(homeDir, ".openclaw", "plugins", "sillytavern", "skills");
 }
 
 /**
@@ -216,14 +217,26 @@ export async function loadSkillsFromDirectory(
 }
 
 /**
- * Load all enabled skills
+ * Load all enabled skills (including bundled skills)
  */
 export async function loadEnabledSkills(): Promise<SkillEntry[]> {
   const index = await loadSkillsIndex();
   const enabledEntries = index.entries.filter((e) => e.enabled);
   const skills: SkillEntry[] = [];
 
+  // First, add bundled skills (they are always available)
+  const bundledSkills = getBundledSkills();
+  skills.push(...bundledSkills);
+
+  // Then add user-enabled skills (skip if name conflicts with bundled)
+  const bundledNames = new Set(bundledSkills.map((s) => s.name.toLowerCase()));
+
   for (const entry of enabledEntries) {
+    // Skip if this skill name conflicts with a bundled skill
+    if (bundledNames.has(entry.name.toLowerCase())) {
+      continue;
+    }
+
     const stored = await loadStoredSkill(entry.id);
     if (stored) {
       skills.push({

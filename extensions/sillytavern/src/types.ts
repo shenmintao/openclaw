@@ -354,10 +354,36 @@ export interface MemoryConfig {
   minImportance?: number;
   /** How to sort memories: importance, recency, or accessCount */
   sortBy?: "importance" | "recency" | "accessCount";
-  /** Whether to auto-extract memories from conversations */
+  /** Whether to auto-extract memories from conversations (deprecated, use extractMode) */
   autoExtract?: boolean;
   /** Keywords that trigger memory extraction */
   extractionTriggers?: string[];
+  /**
+   * Memory extraction mode:
+   * - "off": No automatic extraction
+   * - "trigger": Extract only when trigger keywords are detected
+   * - "auto": Automatically extract after every conversation turn
+   */
+  extractMode?: "off" | "trigger" | "auto";
+  /** Vector search configuration */
+  vectorSearch?: {
+    /** Enable vector-based semantic search */
+    enabled?: boolean;
+    /** Embedding provider: openai, voyage, gemini, local */
+    embeddingProvider?: "openai" | "voyage" | "gemini" | "local";
+    /** Embedding model name */
+    embeddingModel?: string;
+    /** Minimum similarity score for vector search (0-1) */
+    minScore?: number;
+    /** Use hybrid search (vector + keyword) */
+    useHybrid?: boolean;
+    /** Vector weight in hybrid search (0-1) */
+    vectorWeight?: number;
+    /** Keyword weight in hybrid search (0-1) */
+    keywordWeight?: number;
+  };
+  /** Deduplication threshold for auto-extraction (0-1) */
+  deduplicationThreshold?: number;
 }
 
 /**

@@ -26,8 +26,12 @@ import {
 import {
   getOrCreateMemoryBook,
   retrieveMemories,
+  retrieveMemoriesWithVector,
   buildMemoryPrompt,
   autoExtractMemories,
+  shouldExtract,
+  initializeVectorStore,
+  type ExtractionMode,
 } from "../memory/store.js";
 import {
   getEligibleSkills,
@@ -144,6 +148,16 @@ function getMemoryConfig(pluginConfig?: SillyTavernPluginConfig): MemoryConfig {
     sortBy: "importance",
     autoExtract: false,
     extractionTriggers: ["remember", "important", "don't forget", "note that"],
+    extractMode: "off" as ExtractionMode,
+    vectorSearch: {
+      enabled: false,
+      embeddingProvider: "openai",
+      minScore: 0.3,
+      useHybrid: true,
+      vectorWeight: 0.7,
+      keywordWeight: 0.3,
+    },
+    deduplicationThreshold: 0.85,
     ...pluginConfig?.memory,
   };
 }
@@ -499,8 +513,21 @@ export function registerBootstrapHook(api: OpenClawPluginApi): void {
     const pluginConfig = getPluginConfig(api.config as unknown as Record<string, unknown>);
     const memoryConfig = getMemoryConfig(pluginConfig);
 
-    // Only extract if auto-extract is enabled
-    if (!memoryConfig.autoExtract) {
+    // Determine extraction mode
+    const extractMode = memoryConfig.extractMode ?? (memoryConfig.autoExtract ? "trigger" : "off");
+
+    // Get messages for extraction check
+    const messages = (event.messages ?? []) as Array<{ role: "user" | "assistant" | "system"; content: string }>;
+
+    // Check if we should extract based on mode
+    const triggerPatterns = (memoryConfig.extractionTriggers ?? []).map((t) => new RegExp(t, "i"));
+    const shouldRun = shouldExtract({
+      mode: extractMode as ExtractionMode,
+      messages: messages.map((m) => ({ role: m.role, content: String(m.content) })),
+      triggerPatterns: triggerPatterns.length > 0 ? triggerPatterns : undefined,
+    });
+
+    if (!shouldRun) {
       return;
     }
 
@@ -519,23 +546,37 @@ export function registerBootstrapHook(api: OpenClawPluginApi): void {
         return;
       }
 
-      // Extract memories from conversation
-      const messages = event.messages as Array<{ role: string; content: string | unknown }>;
-      const triggers = memoryConfig.extractionTriggers ?? [
-        "remember",
-        "important",
-        "don't forget",
-        "note that",
-        "记住",
-        "重要",
-        "别忘了",
-      ];
+      // Create LLM provider using the agent's completion capability
+      // Note: This requires the agent to expose a completion method
+      // For now, we'll use a simple mock that logs the extraction request
+      const llmProvider = {
+        complete: async (prompt: string): Promise<string> => {
+          // In a real implementation, this would call the agent's LLM
+          // For now, we'll return an empty result to avoid errors
+          api.logger.debug?.("[sillytavern] LLM extraction requested (not yet implemented)");
+          return JSON.stringify({ memories: [], reasoning: "LLM extraction not yet connected" });
+        },
+      };
 
-      const extractedMemories = autoExtractMemories(memoryBook.id, messages, triggers);
+      // Extract memories using LLM
+      const result = await autoExtractMemories({
+        context: {
+          characterName: activeCard?.name,
+          userName: pluginConfig?.macros?.user,
+          sessionKey: ctx?.sessionKey,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: String(m.content),
+          })),
+        },
+        llmProvider,
+        bookId: memoryBook.id,
+        deduplicateThreshold: memoryConfig.deduplicationThreshold ?? 0.85,
+      });
 
-      if (extractedMemories.length > 0) {
+      if (result.saved.length > 0) {
         api.logger.debug?.(
-          `[sillytavern] Auto-extracted ${extractedMemories.length} memories from conversation`,
+          `[sillytavern] Auto-extracted ${result.saved.length} memories from conversation (${result.duplicates.length} duplicates skipped)`,
         );
       }
     } catch (error) {

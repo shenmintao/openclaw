@@ -412,12 +412,56 @@ export function sillyTavernConfigSchema(): PluginConfigSchema {
             },
             autoExtract: {
               type: "boolean",
-              description: "Auto-extract memories from conversations (default: false)",
+              description: "Auto-extract memories from conversations (deprecated, use extractMode)",
             },
             extractionTriggers: {
               type: "array",
               items: { type: "string" },
               description: "Keywords that trigger memory extraction",
+            },
+            extractMode: {
+              type: "string",
+              enum: ["off", "trigger", "auto"],
+              description: "Memory extraction mode: off (disabled), trigger (keyword-based), auto (every turn)",
+            },
+            vectorSearch: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                enabled: {
+                  type: "boolean",
+                  description: "Enable vector-based semantic search (default: false)",
+                },
+                embeddingProvider: {
+                  type: "string",
+                  enum: ["openai", "voyage", "gemini", "local"],
+                  description: "Embedding provider to use (default: openai)",
+                },
+                embeddingModel: {
+                  type: "string",
+                  description: "Embedding model name",
+                },
+                minScore: {
+                  type: "number",
+                  description: "Minimum similarity score for vector search (0-1, default: 0.3)",
+                },
+                useHybrid: {
+                  type: "boolean",
+                  description: "Use hybrid search combining vector and keyword (default: true)",
+                },
+                vectorWeight: {
+                  type: "number",
+                  description: "Vector weight in hybrid search (0-1, default: 0.7)",
+                },
+                keywordWeight: {
+                  type: "number",
+                  description: "Keyword weight in hybrid search (0-1, default: 0.3)",
+                },
+              },
+            },
+            deduplicationThreshold: {
+              type: "number",
+              description: "Similarity threshold for memory deduplication (0-1, default: 0.85)",
             },
           },
         },

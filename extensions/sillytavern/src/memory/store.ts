@@ -1,7 +1,8 @@
 /**
  * Memory Store for SillyTavern Plugin
  *
- * Handles persistence and retrieval of memory books
+ * Handles persistence and retrieval of memory books.
+ * Supports both keyword-based and vector-based (semantic) search.
  */
 
 import * as fs from "node:fs";
@@ -14,6 +15,49 @@ import type {
   StoredMemoryBook,
   MemoryRetrievalResult,
 } from "./types.js";
+
+// Re-export vector store components
+export {
+  VectorMemoryStore,
+  getVectorStore,
+  initializeVectorStore,
+  resetVectorStore,
+  type VectorStoreConfig,
+  type VectorSearchResult,
+  type VectorStoreStatus,
+} from "./vector-store.js";
+
+export {
+  SillyTavernEmbeddingManager,
+  createEmbeddingManager,
+  getEmbeddingProvider,
+  cosineSimilarity,
+  type EmbeddingConfig,
+  type EmbeddingProvider,
+} from "./embedding-manager.js";
+
+export {
+  MemoryVectorIndex,
+  getMemoryIndex,
+  closeMemoryIndex,
+  closeAllMemoryIndexes,
+  type ScoredMemoryEntry,
+  type IndexStatus,
+} from "./memory-index.js";
+
+export {
+  autoExtractMemories,
+  buildExtractionPrompt,
+  parseExtractionResponse,
+  isDuplicateMemory,
+  shouldExtract,
+  getExtractionStats,
+  createAgentLLMProvider,
+  type ExtractedMemory,
+  type ExtractionContext,
+  type ExtractionLLMProvider,
+  type ExtractionMode,
+} from "./auto-extractor.js";
 
 /**
  * Get the memory storage directory
@@ -519,95 +563,6 @@ export function buildMemoryPrompt(memories: MemoryEntry[]): string {
 }
 
 /**
- * Check if text contains memory extraction triggers
- */
-export function containsExtractionTrigger(
-  text: string,
-  triggers: string[] = ["remember", "important", "don't forget", "note that", "记住", "重要", "别忘了"],
-): boolean {
-  const lowerText = text.toLowerCase();
-  return triggers.some((trigger) => lowerText.includes(trigger.toLowerCase()));
-}
-
-/**
- * Extract potential memories from conversation messages
- * Returns messages that contain extraction triggers
- */
-export function extractPotentialMemories(
-  messages: Array<{ role: string; content: string | unknown }>,
-  triggers: string[],
-): Array<{ role: string; content: string; index: number }> {
-  const potentialMemories: Array<{ role: string; content: string; index: number }> = [];
-
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
-    let content = "";
-
-    if (typeof msg.content === "string") {
-      content = msg.content;
-    } else if (Array.isArray(msg.content)) {
-      // Handle multi-part content
-      for (const part of msg.content as Array<{ type?: string; text?: string }>) {
-        if (part && typeof part === "object" && part.type === "text" && typeof part.text === "string") {
-          content += part.text + " ";
-        }
-      }
-    }
-
-    if (content && containsExtractionTrigger(content, triggers)) {
-      potentialMemories.push({
-        role: msg.role,
-        content: content.trim(),
-        index: i,
-      });
-    }
-  }
-
-  return potentialMemories;
-}
-
-/**
- * Auto-extract and save memories from messages
- * This is a simple extraction that saves messages containing trigger words
- */
-export function autoExtractMemories(
-  bookId: string,
-  messages: Array<{ role: string; content: string | unknown }>,
-  triggers: string[],
-): MemoryEntry[] {
-  const book = loadMemoryBook(bookId);
-  if (!book) {
-    return [];
-  }
-
-  const potentialMemories = extractPotentialMemories(messages, triggers);
-  const addedMemories: MemoryEntry[] = [];
-
-  for (const potential of potentialMemories) {
-    // Skip if this content already exists in the book
-    const exists = book.entries.some(
-      (entry) => entry.content === potential.content || entry.source === `msg-${potential.index}`,
-    );
-
-    if (!exists) {
-      const entry = addMemory(bookId, {
-        content: potential.content,
-        type: "auto",
-        importance: 60, // Auto-extracted memories get moderate importance
-        source: `msg-${potential.index}`,
-        category: potential.role === "user" ? "user-stated" : "ai-noted",
-      });
-
-      if (entry) {
-        addedMemories.push(entry);
-      }
-    }
-  }
-
-  return addedMemories;
-}
-
-/**
  * Get or create a memory book for a character/session
  */
 export function getOrCreateMemoryBook(params: {
@@ -637,4 +592,199 @@ export function getOrCreateMemoryBook(params: {
     characterId: params.characterId,
     sessionKey: params.sessionKey,
   });
+}
+
+// ============================================================================
+// Vector Search Integration
+// ============================================================================
+
+import { getVectorStore, type VectorSearchResult } from "./vector-store.js";
+
+/**
+ * Extended retrieval result with vector search support
+ */
+export interface VectorRetrievalResult extends MemoryRetrievalResult {
+  /** Whether vector search was used */
+  vectorSearchUsed: boolean;
+  /** Vector search scores (if available) */
+  scores?: number[];
+}
+
+/**
+ * Retrieve memories using vector search (semantic similarity)
+ * Falls back to keyword search if vector search is not available
+ */
+export async function retrieveMemoriesWithVector(
+  bookId: string,
+  context: string,
+  options?: {
+    maxMemories?: number;
+    minImportance?: number;
+    minScore?: number;
+    useHybrid?: boolean;
+  },
+): Promise<VectorRetrievalResult> {
+  const book = loadMemoryBook(bookId);
+  if (!book) {
+    return {
+      memories: [],
+      totalMemories: 0,
+      truncated: false,
+      method: "all",
+      vectorSearchUsed: false,
+    };
+  }
+
+  const maxMemories = options?.maxMemories ?? book.settings.maxMemoriesPerRequest;
+  const minImportance = options?.minImportance ?? book.settings.minImportanceForInjection;
+  const minScore = options?.minScore ?? 0.3;
+  const useHybrid = options?.useHybrid ?? true;
+
+  // Try vector search first
+  const vectorStore = getVectorStore();
+
+  if (vectorStore.isAvailable()) {
+    try {
+      const results = await vectorStore.search(bookId, context, {
+        maxResults: maxMemories * 2, // Get more results to filter by importance
+        minScore,
+        useHybrid,
+      });
+
+      // Filter by importance and enabled status
+      const filtered = results.filter(
+        (r) => r.entry.enabled && (r.entry.importance ?? 50) >= minImportance,
+      );
+
+      // Take top results
+      const memories = filtered.slice(0, maxMemories).map((r) => r.entry);
+      const scores = filtered.slice(0, maxMemories).map((r) => r.score);
+
+      // Update access counts
+      const now = new Date().toISOString();
+      for (const memory of memories) {
+        const entry = book.entries.find((e) => e.id === memory.id);
+        if (entry) {
+          entry.lastAccessedAt = now;
+          entry.accessCount += 1;
+        }
+      }
+      saveMemoryBook(book);
+
+      return {
+        memories,
+        totalMemories: book.entries.length,
+        truncated: filtered.length > maxMemories,
+        method: useHybrid ? "hybrid" : "vector",
+        vectorSearchUsed: true,
+        scores,
+      };
+    } catch {
+      // Fall back to keyword search
+    }
+  }
+
+  // Fall back to keyword-based retrieval
+  const result = retrieveMemories(bookId, context, {
+    maxMemories,
+    minImportance,
+  });
+
+  return {
+    ...result,
+    vectorSearchUsed: false,
+  };
+}
+
+/**
+ * Sync a memory book to the vector index
+ */
+export async function syncMemoryBookToVector(
+  bookId: string,
+  progress?: (update: { completed: number; total: number; label?: string }) => void,
+): Promise<void> {
+  const book = loadMemoryBook(bookId);
+  if (!book) {
+    return;
+  }
+
+  const vectorStore = getVectorStore();
+  if (!vectorStore.isAvailable()) {
+    return;
+  }
+
+  await vectorStore.syncBook(book, progress);
+}
+
+/**
+ * Add a memory entry and index it in the vector store
+ */
+export async function addMemoryWithVector(
+  bookId: string,
+  params: {
+    content: string;
+    type?: "manual" | "auto";
+    keywords?: string[];
+    importance?: number;
+    category?: string;
+    source?: string;
+  },
+): Promise<MemoryEntry | null> {
+  // Add to JSON store
+  const entry = addMemory(bookId, params);
+  if (!entry) {
+    return null;
+  }
+
+  // Index in vector store
+  const vectorStore = getVectorStore();
+  if (vectorStore.isAvailable()) {
+    try {
+      await vectorStore.addEntry(bookId, entry);
+    } catch {
+      // Vector indexing failed, but entry is still saved
+    }
+  }
+
+  return entry;
+}
+
+/**
+ * Delete a memory entry and remove it from the vector index
+ */
+export function deleteMemoryWithVector(bookId: string, memoryId: string): boolean {
+  // Remove from vector store first
+  const vectorStore = getVectorStore();
+  vectorStore.removeEntry(bookId, memoryId);
+
+  // Remove from JSON store
+  return deleteMemory(bookId, memoryId);
+}
+
+/**
+ * Get vector index status for a memory book
+ */
+export function getMemoryBookVectorStatus(bookId: string): {
+  indexed: boolean;
+  totalEntries: number;
+  indexedEntries: number;
+  model: string | null;
+} {
+  const vectorStore = getVectorStore();
+  if (!vectorStore.isAvailable()) {
+    return {
+      indexed: false,
+      totalEntries: 0,
+      indexedEntries: 0,
+      model: null,
+    };
+  }
+
+  const status = vectorStore.getBookStatus(bookId);
+  return {
+    indexed: status.indexedEntries > 0,
+    totalEntries: status.totalEntries,
+    indexedEntries: status.indexedEntries,
+    model: status.model,
+  };
 }

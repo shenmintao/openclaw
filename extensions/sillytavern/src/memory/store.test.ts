@@ -502,7 +502,7 @@ describe("Memory Store", () => {
   });
 
   describe("autoExtractMemories", () => {
-    it("extracts memories from messages with trigger words", () => {
+    it("extracts memories from messages with LLM provider", async () => {
       const mockBook: StoredMemoryBook = {
         id: "mb-test-123",
         name: "Test Book",
@@ -523,25 +523,73 @@ describe("Memory Store", () => {
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockBook));
       vi.mocked(fs.writeFileSync).mockImplementation(() => {});
 
-      const messages = [
+      const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
         { role: "user", content: "Remember that I like pizza" },
         { role: "assistant", content: "I'll remember that you like pizza!" },
         { role: "user", content: "What's the weather?" },
       ];
 
-      const triggers = ["remember", "important"];
-      const extracted = autoExtractMemories("mb-test-123", messages, triggers);
+      // Mock LLM provider that returns extracted memories
+      const mockLLMProvider = {
+        complete: vi.fn().mockResolvedValue(JSON.stringify({
+          memories: [
+            {
+              content: "User likes pizza",
+              keywords: ["pizza", "food", "preference"],
+              importance: 7,
+              category: "preference",
+            },
+          ],
+          reasoning: "User explicitly stated they like pizza",
+        })),
+      };
 
-      expect(extracted.length).toBeGreaterThanOrEqual(0);
+      const result = await autoExtractMemories({
+        context: {
+          characterName: "Assistant",
+          userName: "User",
+          messages,
+        },
+        llmProvider: mockLLMProvider,
+        bookId: "mb-test-123",
+      });
+
+      expect(result.extracted.length).toBeGreaterThanOrEqual(0);
     });
 
-    it("returns empty array when book does not exist", () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+    it("returns empty arrays when LLM returns no memories", async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+        id: "mb-test-123",
+        name: "Test Book",
+        createdAt: "2024-01-01T00:00:00Z",
+        updatedAt: "2024-01-01T00:00:00Z",
+        entries: [],
+        settings: {},
+      }));
 
-      const messages = [{ role: "user", content: "Remember this" }];
-      const extracted = autoExtractMemories("nonexistent", messages, ["remember"]);
+      const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
+        { role: "user", content: "Hello" },
+      ];
 
-      expect(extracted).toEqual([]);
+      const mockLLMProvider = {
+        complete: vi.fn().mockResolvedValue(JSON.stringify({
+          memories: [],
+          reasoning: "No significant information to remember",
+        })),
+      };
+
+      const result = await autoExtractMemories({
+        context: {
+          characterName: "Assistant",
+          userName: "User",
+          messages,
+        },
+        llmProvider: mockLLMProvider,
+      });
+
+      expect(result.extracted).toEqual([]);
+      expect(result.saved).toEqual([]);
     });
   });
 });

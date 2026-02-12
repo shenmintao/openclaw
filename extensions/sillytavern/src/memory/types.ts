@@ -126,7 +126,7 @@ export interface MemoryRetrievalResult {
   /** Whether retrieval was truncated due to limits */
   truncated: boolean;
   /** Retrieval method used */
-  method: "keyword" | "importance" | "recency" | "all";
+  method: "keyword" | "importance" | "recency" | "all" | "vector" | "hybrid";
 }
 
 /**
