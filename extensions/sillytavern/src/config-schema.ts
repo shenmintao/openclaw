@@ -215,6 +215,135 @@ export function sillyTavernConfigSchema(): PluginConfigSchema {
         }
       }
 
+      // Parse memory config
+      if (value.memory !== undefined) {
+        if (!isRecord(value.memory)) {
+          return error(["memory"], "expected object");
+        }
+        config.memory = {};
+        const memory = value.memory;
+
+        if (memory.enabled !== undefined) {
+          if (!isBoolean(memory.enabled)) {
+            return error(["memory", "enabled"], "expected boolean");
+          }
+          config.memory.enabled = memory.enabled;
+        }
+        if (memory.maxMemoriesPerRequest !== undefined) {
+          if (!isNumber(memory.maxMemoriesPerRequest)) {
+            return error(["memory", "maxMemoriesPerRequest"], "expected number");
+          }
+          config.memory.maxMemoriesPerRequest = memory.maxMemoriesPerRequest;
+        }
+        if (memory.maxMemoryTokens !== undefined) {
+          if (!isNumber(memory.maxMemoryTokens)) {
+            return error(["memory", "maxMemoryTokens"], "expected number");
+          }
+          config.memory.maxMemoryTokens = memory.maxMemoryTokens;
+        }
+        if (memory.useKeywordRetrieval !== undefined) {
+          if (!isBoolean(memory.useKeywordRetrieval)) {
+            return error(["memory", "useKeywordRetrieval"], "expected boolean");
+          }
+          config.memory.useKeywordRetrieval = memory.useKeywordRetrieval;
+        }
+        if (memory.minImportance !== undefined) {
+          if (!isNumber(memory.minImportance)) {
+            return error(["memory", "minImportance"], "expected number");
+          }
+          config.memory.minImportance = memory.minImportance;
+        }
+        if (memory.sortBy !== undefined) {
+          if (!isString(memory.sortBy)) {
+            return error(["memory", "sortBy"], "expected string");
+          }
+          if (!["importance", "recency", "accessCount"].includes(memory.sortBy)) {
+            return error(["memory", "sortBy"], "must be one of: importance, recency, accessCount");
+          }
+          config.memory.sortBy = memory.sortBy as "importance" | "recency" | "accessCount";
+        }
+        if (memory.autoExtract !== undefined) {
+          if (!isBoolean(memory.autoExtract)) {
+            return error(["memory", "autoExtract"], "expected boolean");
+          }
+          config.memory.autoExtract = memory.autoExtract;
+        }
+        if (memory.extractionTriggers !== undefined) {
+          if (!isStringArray(memory.extractionTriggers)) {
+            return error(["memory", "extractionTriggers"], "expected string array");
+          }
+          config.memory.extractionTriggers = memory.extractionTriggers;
+        }
+        if (memory.extractMode !== undefined) {
+          if (!isString(memory.extractMode)) {
+            return error(["memory", "extractMode"], "expected string");
+          }
+          if (!["off", "trigger", "auto"].includes(memory.extractMode)) {
+            return error(["memory", "extractMode"], "must be one of: off, trigger, auto");
+          }
+          config.memory.extractMode = memory.extractMode as "off" | "trigger" | "auto";
+        }
+        if (memory.deduplicationThreshold !== undefined) {
+          if (!isNumber(memory.deduplicationThreshold)) {
+            return error(["memory", "deduplicationThreshold"], "expected number");
+          }
+          config.memory.deduplicationThreshold = memory.deduplicationThreshold;
+        }
+        if (memory.vectorSearch !== undefined) {
+          if (!isRecord(memory.vectorSearch)) {
+            return error(["memory", "vectorSearch"], "expected object");
+          }
+          config.memory.vectorSearch = {};
+          const vs = memory.vectorSearch;
+
+          if (vs.enabled !== undefined) {
+            if (!isBoolean(vs.enabled)) {
+              return error(["memory", "vectorSearch", "enabled"], "expected boolean");
+            }
+            config.memory.vectorSearch.enabled = vs.enabled;
+          }
+          if (vs.embeddingProvider !== undefined) {
+            if (!isString(vs.embeddingProvider)) {
+              return error(["memory", "vectorSearch", "embeddingProvider"], "expected string");
+            }
+            if (!["openai", "voyage", "gemini", "local"].includes(vs.embeddingProvider)) {
+              return error(["memory", "vectorSearch", "embeddingProvider"], "must be one of: openai, voyage, gemini, local");
+            }
+            config.memory.vectorSearch.embeddingProvider = vs.embeddingProvider as "openai" | "voyage" | "gemini" | "local";
+          }
+          if (vs.embeddingModel !== undefined) {
+            if (!isString(vs.embeddingModel)) {
+              return error(["memory", "vectorSearch", "embeddingModel"], "expected string");
+            }
+            config.memory.vectorSearch.embeddingModel = vs.embeddingModel;
+          }
+          if (vs.minScore !== undefined) {
+            if (!isNumber(vs.minScore)) {
+              return error(["memory", "vectorSearch", "minScore"], "expected number");
+            }
+            config.memory.vectorSearch.minScore = vs.minScore;
+          }
+          if (vs.useHybrid !== undefined) {
+            if (!isBoolean(vs.useHybrid)) {
+              return error(["memory", "vectorSearch", "useHybrid"], "expected boolean");
+            }
+            config.memory.vectorSearch.useHybrid = vs.useHybrid;
+          }
+          if (vs.vectorWeight !== undefined) {
+            if (!isNumber(vs.vectorWeight)) {
+              return error(["memory", "vectorSearch", "vectorWeight"], "expected number");
+            }
+            config.memory.vectorSearch.vectorWeight = vs.vectorWeight;
+          }
+          if (vs.keywordWeight !== undefined) {
+            if (!isNumber(vs.keywordWeight)) {
+              return error(["memory", "vectorSearch", "keywordWeight"], "expected number");
+            }
+            config.memory.vectorSearch.keywordWeight = vs.keywordWeight;
+          }
+        }
+      }
+
       // Parse skills config
       if (value.skills !== undefined) {
         if (!isRecord(value.skills)) {
