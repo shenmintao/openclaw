@@ -7,6 +7,7 @@
     "properties": {
       "character": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "active": {
             "type": "string",
@@ -36,6 +37,7 @@
       },
       "worldInfo": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "enabled": {
             "type": "boolean",
@@ -56,11 +58,17 @@
             "type": "number",
             "default": 2000,
             "description": "Maximum tokens for world info content"
+          },
+          "recursiveScan": {
+            "type": "boolean",
+            "default": false,
+            "description": "Enable recursive keyword scanning"
           }
         }
       },
       "preset": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "active": {
             "type": "string",
@@ -75,19 +83,198 @@
             "type": "boolean",
             "default": true,
             "description": "Expand macro variables like {{user}}, {{char}}"
+          },
+          "applySamplingParams": {
+            "type": "boolean",
+            "default": false,
+            "description": "Apply preset sampling parameters"
           }
         }
       },
       "macros": {
         "type": "object",
+        "description": "Macro variables for template substitution",
         "properties": {
           "user": {
             "type": "string",
             "description": "Value for {{user}} macro"
+          },
+          "char": {
+            "type": "string",
+            "description": "Value for {{char}} macro (defaults to character card name)"
+          },
+          "dateFormat": {
+            "type": "string",
+            "description": "Date format string for {{date}} macro"
+          },
+          "timeFormat": {
+            "type": "string",
+            "description": "Time format string for {{time}} macro"
+          },
+          "idleDuration": {
+            "type": "number",
+            "description": "Idle duration in minutes"
+          },
+          "randomSeed": {
+            "type": "number",
+            "description": "Random seed for {{random}} macro"
+          },
+          "customVariables": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Custom variables for {{custom::key}} syntax"
           }
         },
         "additionalProperties": {
           "type": "string"
+        }
+      },
+      "memory": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Memory system configuration",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable memory system"
+          },
+          "maxMemoriesPerRequest": {
+            "type": "number",
+            "default": 10,
+            "description": "Maximum memories to inject per request"
+          },
+          "maxMemoryTokens": {
+            "type": "number",
+            "default": 1000,
+            "description": "Maximum tokens for memory content"
+          },
+          "useKeywordRetrieval": {
+            "type": "boolean",
+            "default": true,
+            "description": "Use keyword-based memory retrieval"
+          },
+          "minImportance": {
+            "type": "number",
+            "default": 50,
+            "description": "Minimum importance score for injection (0-100)"
+          },
+          "sortBy": {
+            "type": "string",
+            "enum": ["importance", "recency", "accessCount"],
+            "default": "importance",
+            "description": "How to sort memories for injection"
+          },
+          "autoExtract": {
+            "type": "boolean",
+            "default": false,
+            "description": "Auto-extract memories (deprecated, use extractMode)"
+          },
+          "extractionTriggers": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Keywords that trigger memory extraction"
+          },
+          "extractMode": {
+            "type": "string",
+            "enum": ["off", "trigger", "auto"],
+            "default": "off",
+            "description": "Memory extraction mode: off, trigger (keyword-based), auto (every turn)"
+          },
+          "deduplicationThreshold": {
+            "type": "number",
+            "default": 0.85,
+            "description": "Similarity threshold for memory deduplication (0-1)"
+          },
+          "vectorSearch": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Vector search configuration",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "default": false,
+                "description": "Enable vector-based semantic search"
+              },
+              "embeddingProvider": {
+                "type": "string",
+                "enum": ["openai", "voyage", "gemini", "local"],
+                "default": "openai",
+                "description": "Embedding provider to use"
+              },
+              "embeddingModel": {
+                "type": "string",
+                "description": "Embedding model name"
+              },
+              "minScore": {
+                "type": "number",
+                "default": 0.3,
+                "description": "Minimum similarity score for vector search (0-1)"
+              },
+              "useHybrid": {
+                "type": "boolean",
+                "default": true,
+                "description": "Use hybrid search (vector + keyword)"
+              },
+              "vectorWeight": {
+                "type": "number",
+                "default": 0.7,
+                "description": "Vector weight in hybrid search (0-1)"
+              },
+              "keywordWeight": {
+                "type": "number",
+                "default": 0.3,
+                "description": "Keyword weight in hybrid search (0-1)"
+              }
+            }
+          }
+        }
+      },
+      "skills": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Skills system configuration",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable skills injection"
+          },
+          "maxSkills": {
+            "type": "number",
+            "default": 20,
+            "description": "Maximum skills to include in prompt"
+          },
+          "maxTokens": {
+            "type": "number",
+            "default": 4096,
+            "description": "Maximum tokens for skills content"
+          },
+          "filter": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Only include these skills (allowlist)"
+          },
+          "always": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Skills to always include regardless of eligibility"
+          },
+          "exclude": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Skills to exclude"
+          },
+          "watch": {
+            "type": "boolean",
+            "default": false,
+            "description": "Watch skills directory for changes"
+          },
+          "extraDirs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Extra directories to scan for skills"
+          }
         }
       }
     }
