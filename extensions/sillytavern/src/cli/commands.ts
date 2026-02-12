@@ -57,6 +57,7 @@ import {
   loadEnabledSkills,
   syncSkillsFromWorkspace,
 } from "../skills/store.js";
+import { getBundledSkills } from "../skills/bundled/index.js";
 
 /**
  * Register SillyTavern CLI commands
@@ -845,31 +846,57 @@ export function registerSillyTavernCli(program: Command): void {
   skills
     .command("list")
     .alias("ls")
-    .description("List all imported skills")
+    .description("List all skills (bundled and imported)")
     .option("--enabled", "Show only enabled skills")
-    .action(async (options: { enabled?: boolean }) => {
-      const allSkills = await getAllSkills();
+    .option("--bundled", "Show only bundled skills")
+    .option("--imported", "Show only imported skills")
+    .action(async (options: { enabled?: boolean; bundled?: boolean; imported?: boolean }) => {
+      // Get bundled skills
+      const bundledSkills = getBundledSkills();
 
-      if (allSkills.length === 0) {
-        console.log("No skills imported yet.");
-        console.log("Use `openclaw st skills import <file>` to import a skill.");
-        return;
-      }
+      // Get imported skills
+      const importedSkills = await getAllSkills();
 
-      const filtered = options.enabled
-        ? allSkills.filter((s) => s.enabled)
-        : allSkills;
-
-      console.log(`Skills (${filtered.length}/${allSkills.length}):\n`);
-
-      for (const skill of filtered) {
-        const status = skill.enabled ? "✓" : "○";
-        const emoji = skill.metadata?.emoji ?? "🧩";
-        console.log(`  ${status} ${emoji} ${skill.name}`);
-        if (skill.description) {
-          console.log(`      ${skill.description.slice(0, 60)}${skill.description.length > 60 ? "..." : ""}`);
+      // Display bundled skills
+      if (!options.imported) {
+        console.log(`\n📦 Bundled Skills (${bundledSkills.length}):\n`);
+        if (bundledSkills.length === 0) {
+          console.log("  No bundled skills found.");
+        } else {
+          for (const skill of bundledSkills) {
+            const emoji = skill.metadata?.emoji ?? "🧩";
+            console.log(`  ✓ ${emoji} ${skill.name}`);
+            if (skill.description) {
+              console.log(`      ${skill.description.slice(0, 60)}${skill.description.length > 60 ? "..." : ""}`);
+            }
+          }
         }
       }
+
+      // Display imported skills
+      if (!options.bundled) {
+        const filtered = options.enabled
+          ? importedSkills.filter((s) => s.enabled)
+          : importedSkills;
+
+        console.log(`\n📁 Imported Skills (${filtered.length}/${importedSkills.length}):\n`);
+
+        if (importedSkills.length === 0) {
+          console.log("  No skills imported yet.");
+          console.log("  Use `openclaw st skills import <file>` to import a skill.");
+        } else {
+          for (const skill of filtered) {
+            const status = skill.enabled ? "✓" : "○";
+            const emoji = skill.metadata?.emoji ?? "🧩";
+            console.log(`  ${status} ${emoji} ${skill.name}`);
+            if (skill.description) {
+              console.log(`      ${skill.description.slice(0, 60)}${skill.description.length > 60 ? "..." : ""}`);
+            }
+          }
+        }
+      }
+
+      console.log("");
     });
 
   // Show skill details
